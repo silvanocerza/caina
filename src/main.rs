@@ -57,8 +57,22 @@ impl Info {
             .iter()
             .map(|b| format!("%{:02X}", b))
             .collect()
-        // format!("{:x}", )
-        // .replace("0x", "\\x")
+    }
+
+    fn size(&self) -> usize {
+        if self.length.is_some() {
+            self.length.expect("This can't happen")
+        } else if self.files.is_some() {
+            self.files
+                .as_ref()
+                .expect("This can't happen either")
+                .iter()
+                .map(|f| f.length)
+                .reduce(|acc, l| acc + l)
+                .expect("This can't happen")
+        } else {
+            panic!("Something really bad happened");
+        }
     }
 }
 
@@ -74,63 +88,36 @@ struct File {
     path: Vec<String>,
 }
 
-fn tracker_get(torrent: &MetaInfo) {
+fn generate_peer_id() -> String {
     let random_id_suffix: String = rand::thread_rng()
         .sample_iter(Alphanumeric)
         .take(12)
         .map(|b| format!("%{:02X}", b))
         .collect();
-    let peer_id_fixed: String = "-CC0000-".bytes().map(|b| format!("%{:02X}", b)).collect();
-    let peer_id = format!("{}{}", peer_id_fixed, random_id_suffix);
-
     // Use CC000 as prefix, CC from Cascata, the name I'll be using for the project
     // 000 is the version, just zeroes for the time being.
-    // TODO: Need to find a way to get the hash of the info field, and the number of bytes left.
-    // In this case the number of bytes will be equals to the torrent size, in the future it's
-    // a bit more complex as we need to take into account corrupted data.
-    let size = if torrent.info.length.is_some() {
-        torrent.info.length.expect("This can't happen").to_string()
-    } else if torrent.info.files.is_some() {
-        torrent
-            .info
-            .files
-            .as_ref()
-            .expect("This can't happen either")
-            .iter()
-            .map(|f| f.length)
-            .reduce(|acc, l| acc + l)
-            .expect("This can't happen")
-            .to_string()
-    } else {
-        panic!("Something really bad happened");
-    };
-    let info_hash = torrent.info.hash();
-    println!("{:?}", info_hash);
-    let query = [
-        ("info_hash", info_hash.as_str()),
-        ("peer_id", peer_id.as_str()),
-        ("port", "6881"),
-        ("uploaded", "0"),
-        ("downloaded", "0"),
-        ("compact", "1"),
-        ("left", size.as_str()),
-    ];
+    let peer_id_fixed: String = "-CC0000-".bytes().map(|b| format!("%{:02X}", b)).collect();
+    format!("{}{}", peer_id_fixed, random_id_suffix)
+}
 
-    let url = format!(
-        "{}?info_hash={}&peer_id={}&port=6881&uploaded=0&downloaded=0&compact=0&left={}",
-        torrent.announce, info_hash, peer_id, size,
-    );
+fn build_tracker_url(torrent: &MetaInfo) -> String {
+    format!(
+        "{}?info_hash={}&peer_id={}&port={}&uploaded={}&downloaded={}&compact={}&left={}",
+        torrent.announce,
+        torrent.info.hash(),
+        generate_peer_id(),
+        "6881",
+        "0",
+        "0",
+        "0",
+        torrent.info.size(),
+    )
+}
 
+fn tracker_get(torrent: &MetaInfo) {
+    let url = build_tracker_url(torrent);
     let client = reqwest::blocking::Client::new();
-    let req = client
-        .get(url)
-        // .get(&torrent.announce)
-        // .query(&query)
-        .build()
-        .expect("");
-    let q = req.url().query();
-    println!("{:?}", q);
-    let res = match client.execute(req) {
+    let res = match client.get(url).send() {
         Ok(res) => res,
         Err(err) => panic!("Failed request: {}", err),
     };
