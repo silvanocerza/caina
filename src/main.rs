@@ -1,8 +1,9 @@
 use core::panic;
-use std::path::PathBuf;
+use std::{net::IpAddr, path::PathBuf};
 
 use clap::Parser;
 use rand::{distributions::Alphanumeric, Rng};
+use serde::{Deserialize, Deserializer};
 use serde_derive::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 
@@ -95,17 +96,49 @@ struct Peer {
     ip: String,
     port: String,
 }
+fn deserialize_peers<'de, D>(deserializer: D) -> Result<Vec<Peer>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: serde_bytes::ByteBuf = Deserialize::deserialize(deserializer)?;
 
+    if let Ok(peers) = serde_bencode::from_bytes::<Vec<Peer>>(s.as_slice()) {
+        return Ok(peers);
+    };
+
+    let mut peers: Vec<Peer> = vec![];
+    for chunk in s.chunks(6) {
+        let ip: [u8; 4] = chunk[..4].try_into().unwrap();
+        let port: [u8; 2] = chunk[4..].try_into().unwrap();
+
+        let ip = IpAddr::from(ip).to_string();
+        let port = ((port[0] as u16) << 8 | port[1] as u16).to_string();
+
+        peers.push(Peer {
+            id: String::from(""),
+            ip,
+            port,
+        });
+    }
+    Ok(peers)
+}
 #[derive(Deserialize, Debug)]
 struct TrackerResponse {
     #[serde(rename = "failure reason")]
     failure_reason: Option<String>,
+    #[serde(rename = "warning message")]
+    warning_message: Option<String>,
     #[serde(default)]
     interval: i32,
+    #[serde(default, rename = "min interval")]
+    min_interval: Option<i32>,
+    #[serde(default, rename = "tracker id")]
+    tracker_id: String,
     #[serde(default)]
-    // TODO: This needs a custom parser, depending on the tracker it could be either a bencoded map
-    // or a binary model containing only IP and port.
-    // If it's in binary it's a string of multiple of 6 bytes, first 4 are the IP the other 2 the port.
+    complete: i32, // Seeders
+    #[serde(default)]
+    incomplete: i32, // Leechers
+    #[serde(default, deserialize_with = "deserialize_peers")]
     peers: Vec<Peer>,
 }
 
@@ -143,14 +176,12 @@ fn tracker_get(torrent: &MetaInfo) {
         Err(err) => panic!("Failed request: {}", err),
     };
 
-    let body = match res.text() {
+    let body = match res.bytes() {
         Ok(body) => body,
         Err(err) => panic!("Failed reading response body: {}", err),
     };
 
-    println!("{}", body);
-
-    let tracker_res = match serde_bencode::from_str::<TrackerResponse>(&body) {
+    let tracker_res = match serde_bencode::from_bytes::<TrackerResponse>(&body) {
         Ok(tracker_res) => tracker_res,
         Err(err) => panic!("Failed parsing response body: {}", err),
     };
@@ -161,9 +192,9 @@ fn tracker_get(torrent: &MetaInfo) {
     }
 
     println!("interval: {}", tracker_res.interval);
-    // for peer in tracker_res.peers {
-    //     println!("{}: {}:{}", peer.id, peer.ip, peer.port);
-    // }
+    for peer in tracker_res.peers {
+        println!("{}: {}:{}", peer.id, peer.ip, peer.port);
+    }
 }
 
 #[derive(Parser)]
