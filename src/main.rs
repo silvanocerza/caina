@@ -168,7 +168,7 @@ fn build_tracker_url(torrent: &MetaInfo) -> String {
     )
 }
 
-fn tracker_get(torrent: &MetaInfo) {
+fn tracker_get(torrent: &MetaInfo) -> Result<TrackerResponse, String> {
     if !torrent.announce.starts_with("http") {
         // TODO: Support UDP trackers
         let protocol = torrent.announce.split(":").collect::<Vec<&str>>()[0];
@@ -178,28 +178,25 @@ fn tracker_get(torrent: &MetaInfo) {
     let client = reqwest::blocking::Client::new();
     let res = match client.get(url).send() {
         Ok(res) => res,
-        Err(err) => panic!("Failed request: {}", err),
+        Err(err) => return Err(format!("Failed request: {}", err)),
     };
 
     let body = match res.bytes() {
         Ok(body) => body,
-        Err(err) => panic!("Failed reading response body: {}", err),
+        Err(err) => return Err(format!("Failed reading response body: {}", err)),
     };
 
     let tracker_res = match serde_bencode::from_bytes::<TrackerResponse>(&body) {
         Ok(tracker_res) => tracker_res,
-        Err(err) => panic!("Failed parsing response body: {}", err),
+        Err(err) => return Err(format!("Failed parsing response body: {}", err)),
     };
 
     match tracker_res.failure_reason {
-        Some(err) => panic!("{}", err),
+        Some(err) => return Err(err),
         _ => {}
     }
 
-    println!("interval: {}", tracker_res.interval);
-    for peer in tracker_res.peers {
-        println!("{}: {}:{}", peer.id, peer.ip, peer.port);
-    }
+    Ok(tracker_res)
 }
 
 #[derive(Parser)]
@@ -246,5 +243,8 @@ fn main() {
         }
     }
 
-    tracker_get(&res);
+    let tracker_response = match tracker_get(&res) {
+        Ok(res) => res,
+        Err(err) => panic!("{}", err),
+    };
 }
