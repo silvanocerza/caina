@@ -1,4 +1,4 @@
-# Caina
+# Caina (ˈkai̯na)
 
 This is supposed to be a BitTorrent client.
 As of now it's just a small CLI that reads .torrent files and prints their information in human readable form.
