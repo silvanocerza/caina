@@ -88,6 +88,27 @@ struct File {
     path: Vec<String>,
 }
 
+#[derive(Deserialize, Debug)]
+struct Peer {
+    #[serde(rename = "peer id")]
+    id: String,
+    ip: String,
+    port: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct TrackerResponse {
+    #[serde(rename = "failure reason")]
+    failure_reason: Option<String>,
+    #[serde(default)]
+    interval: i32,
+    #[serde(default)]
+    // TODO: This needs a custom parser, depending on the tracker it could be either a bencoded map
+    // or a binary model containing only IP and port.
+    // If it's in binary it's a string of multiple of 6 bytes, first 4 are the IP the other 2 the port.
+    peers: Vec<Peer>,
+}
+
 fn generate_peer_id() -> String {
     let random_id_suffix: String = rand::thread_rng()
         .sample_iter(Alphanumeric)
@@ -121,12 +142,28 @@ fn tracker_get(torrent: &MetaInfo) {
         Ok(res) => res,
         Err(err) => panic!("Failed request: {}", err),
     };
+
     let body = match res.text() {
         Ok(body) => body,
         Err(err) => panic!("Failed reading response body: {}", err),
     };
 
-    println!("body = {body:?}");
+    println!("{}", body);
+
+    let tracker_res = match serde_bencode::from_str::<TrackerResponse>(&body) {
+        Ok(tracker_res) => tracker_res,
+        Err(err) => panic!("Failed parsing response body: {}", err),
+    };
+
+    match tracker_res.failure_reason {
+        Some(err) => panic!("{}", err),
+        _ => {}
+    }
+
+    println!("interval: {}", tracker_res.interval);
+    // for peer in tracker_res.peers {
+    //     println!("{}: {}:{}", peer.id, peer.ip, peer.port);
+    // }
 }
 
 #[derive(Parser)]
