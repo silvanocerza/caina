@@ -169,6 +169,11 @@ fn build_tracker_url(torrent: &MetaInfo) -> String {
 }
 
 fn tracker_get(torrent: &MetaInfo) {
+    if !torrent.announce.starts_with("http") {
+        // TODO: Support UDP trackers
+        let protocol = torrent.announce.split(":").collect::<Vec<&str>>()[0];
+        panic!("{} trackers not supported", protocol)
+    }
     let url = build_tracker_url(torrent);
     let client = reqwest::blocking::Client::new();
     let res = match client.get(url).send() {
