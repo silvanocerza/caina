@@ -154,12 +154,12 @@ fn generate_peer_id() -> String {
     format!("{}{}", peer_id_fixed, random_id_suffix)
 }
 
-fn build_tracker_url(torrent: &MetaInfo) -> String {
+fn build_tracker_url(torrent: &MetaInfo, peer_id: String) -> String {
     format!(
         "{}?info_hash={}&peer_id={}&port={}&uploaded={}&downloaded={}&compact={}&left={}",
         torrent.announce,
         torrent.info.hash(),
-        generate_peer_id(),
+        peer_id,
         "6881",
         "0",
         "0",
@@ -168,13 +168,13 @@ fn build_tracker_url(torrent: &MetaInfo) -> String {
     )
 }
 
-fn tracker_get(torrent: &MetaInfo) -> Result<TrackerResponse, String> {
+fn tracker_get(torrent: &MetaInfo, peer_id: String) -> Result<TrackerResponse, String> {
     if !torrent.announce.starts_with("http") {
         // TODO: Support UDP trackers
         let protocol = torrent.announce.split(":").collect::<Vec<&str>>()[0];
         panic!("{} trackers not supported", protocol)
     }
-    let url = build_tracker_url(torrent);
+    let url = build_tracker_url(torrent, peer_id);
     let client = reqwest::blocking::Client::new();
     let res = match client.get(url).send() {
         Ok(res) => res,
@@ -207,7 +207,8 @@ struct Cli {
 fn main() {
     let args = Cli::parse();
     let torrent_file = args.torrent_file;
-    // let torrent_file = "ubuntu-23.10.1-desktop-amd64.iso.torrent";
+
+    let peer_id = generate_peer_id();
 
     // Read the file
     let buf = match std::fs::read(&torrent_file) {
@@ -243,7 +244,7 @@ fn main() {
         }
     }
 
-    let tracker_response = match tracker_get(&res) {
+    let tracker_response = match tracker_get(&res, peer_id) {
         Ok(res) => res,
         Err(err) => panic!("{}", err),
     };
