@@ -1,4 +1,4 @@
-use crate::message::{peer, TrackerResponse};
+use crate::message::TrackerResponse;
 use crate::torrentfile::Info;
 use serde_derive::{Deserialize, Serialize};
 
