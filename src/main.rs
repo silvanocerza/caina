@@ -4,7 +4,7 @@ pub mod message;
 pub mod peer_id;
 pub mod torrentfile;
 
-use crate::message::{Handshake, Peer, TrackerResponse};
+use crate::message::{Handshake, Peer};
 use crate::peer_id::generate_peer_id;
 use crate::torrentfile::MetaInfo;
 
@@ -17,37 +17,6 @@ use std::{
 
 use bincode::Options;
 use clap::Parser;
-
-fn tracker_get(torrent: &MetaInfo, peer_id: &String) -> Result<TrackerResponse, String> {
-    if !torrent.announce.starts_with("http") {
-        // TODO: Support UDP trackers
-        let protocol = torrent.announce.split(":").collect::<Vec<&str>>()[0];
-        panic!("{} trackers not supported", protocol)
-    }
-    let url = torrent.build_tracker_url(&peer_id);
-    let client = reqwest::blocking::Client::new();
-    let res = match client.get(url).send() {
-        Ok(res) => res,
-        Err(err) => return Err(format!("Failed request: {}", err)),
-    };
-
-    let body = match res.bytes() {
-        Ok(body) => body,
-        Err(err) => return Err(format!("Failed reading response body: {}", err)),
-    };
-
-    let tracker_res = match serde_bencode::from_bytes::<TrackerResponse>(&body) {
-        Ok(tracker_res) => tracker_res,
-        Err(err) => return Err(format!("Failed parsing response body: {}", err)),
-    };
-
-    match tracker_res.failure_reason {
-        Some(err) => return Err(err),
-        _ => {}
-    }
-
-    Ok(tracker_res)
-}
 
 fn open_stream(peer: &Peer, info_hash: &String, peer_id: &String) -> Result<TcpStream, String> {
     // let timeout = Duration::new(3, 0);
@@ -164,7 +133,7 @@ fn main() {
         }
     }
 
-    let tracker_response = match tracker_get(&res, &peer_id) {
+    let tracker_response = match res.tracker_get(&peer_id) {
         Ok(res) => res,
         Err(err) => panic!("{}", err),
     };
