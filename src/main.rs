@@ -1,6 +1,9 @@
 use core::panic;
 
+pub mod peer_id;
 pub mod torrentfile;
+
+use crate::peer_id::generate_peer_id;
 use crate::torrentfile::MetaInfo;
 
 use std::{
@@ -12,7 +15,6 @@ use std::{
 
 use bincode::Options;
 use clap::Parser;
-use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Deserializer};
 use serde_derive::{Deserialize, Serialize};
 
@@ -74,18 +76,6 @@ struct TrackerResponse {
     incomplete: i32, // Leechers
     #[serde(default, deserialize_with = "deserialize_peers")]
     peers: Vec<Peer>,
-}
-
-fn generate_peer_id() -> String {
-    let random_id_suffix: String = rand::thread_rng()
-        .sample_iter(Alphanumeric)
-        .take(12)
-        .map(|b| format!("%{:02X}", b))
-        .collect();
-    // Use CN000 as prefix, CN from Caina, the name I'll be using for the project
-    // 000 is the version, just zeroes for the time being.
-    let peer_id_fixed: String = "-CN0000-".bytes().map(|b| format!("%{:02X}", b)).collect();
-    format!("{}{}", peer_id_fixed, random_id_suffix)
 }
 
 fn tracker_get(torrent: &MetaInfo, peer_id: &String) -> Result<TrackerResponse, String> {
