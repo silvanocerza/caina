@@ -1,4 +1,4 @@
-use crate::message::TrackerResponse;
+use crate::message::{peer, TrackerResponse};
 use crate::torrentfile::Info;
 use serde_derive::{Deserialize, Serialize};
 
@@ -13,21 +13,28 @@ pub struct MetaInfo {
 }
 
 impl MetaInfo {
-    pub fn build_tracker_url(&self, peer_id: &String) -> String {
+    pub fn build_tracker_url(&self, peer_id: &Vec<u8>) -> String {
         format!(
             "{}?info_hash={}&peer_id={}&port={}&uploaded={}&downloaded={}&compact={}&left={}",
-            self.announce,            // Tracker url
-            self.info.hash_encoded(), // inso_hash
-            peer_id,                  // peer_id
-            "6881",                   // port
-            "0",                      // uploaded
-            "0",                      // downloaded
-            "1",                      // compact
-            self.info.size(),         // left
+            self.announce, // Tracker url
+            self.info
+                .hash()
+                .iter()
+                .map(|b| format!("%{:02X}", b))
+                .collect::<String>(), // info_hash
+            peer_id
+                .iter()
+                .map(|b| format!("%{:02X}", b))
+                .collect::<String>(), // peer_id
+            "6881",        // port
+            "0",           // uploaded
+            "0",           // downloaded
+            "1",           // compact
+            self.info.size(), // left
         )
     }
 
-    pub fn tracker_get(&self, peer_id: &String) -> Result<TrackerResponse, String> {
+    pub fn tracker_get(&self, peer_id: &Vec<u8>) -> Result<TrackerResponse, String> {
         if !self.announce.starts_with("http") {
             // TODO: Support UDP trackers
             let protocol = self.announce.split(":").collect::<Vec<&str>>()[0];

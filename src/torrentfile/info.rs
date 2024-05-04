@@ -31,27 +31,14 @@ pub struct Info {
 }
 
 impl Info {
-    pub fn hash(&self) -> String {
+    pub fn hash(&self) -> Vec<u8> {
         let buf = match serde_bencode::to_bytes(self) {
             Ok(buf) => buf,
             Err(err) => {
                 panic!("Failed parsing: {}", err)
             }
         };
-        Sha1::digest(buf).iter().map(|b| format!("{}", b)).collect()
-    }
-
-    pub fn hash_encoded(&self) -> String {
-        let buf = match serde_bencode::to_bytes(self) {
-            Ok(buf) => buf,
-            Err(err) => {
-                panic!("Failed parsing: {}", err)
-            }
-        };
-        Sha1::digest(buf)
-            .iter()
-            .map(|b: &u8| format!("%{:02X}", b))
-            .collect()
+        Sha1::digest(buf).to_vec()
     }
 
     pub fn size(&self) -> usize {
