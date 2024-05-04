@@ -15,4 +15,3 @@ reqwest = { version = "0.12.2", features = ["blocking"] }
 rand = "0.8.5"
 sha-1 = "0.10.1"
 data-encoding = "2.5.0"
-bincode = "1.3.3"
