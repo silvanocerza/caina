@@ -7,8 +7,6 @@ use std::{
     net::TcpStream,
 };
 
-use bincode::Options;
-
 #[derive(Deserialize, Debug)]
 pub struct Peer {
     #[serde(rename = "peer id")]
@@ -22,9 +20,7 @@ impl Peer {
         format!("{}:{}", self.ip, self.port)
     }
 
-    pub fn open_stream(&self, info_hash: &String, peer_id: &String) -> Result<TcpStream, String> {
-        // let timeout = Duration::new(3, 0);
-        // let mut stream = match TcpStream::connect_timeout(peer.address(), timeout) {
+    pub fn open_stream(&self, info_hash: &Vec<u8>, peer_id: &Vec<u8>) -> Result<TcpStream, String> {
         let mut stream = match TcpStream::connect(self.address()) {
             Ok(s) => s,
             Err(err) => return Err(format!("Failed opening TCP stream: {}", err)),
@@ -33,24 +29,7 @@ impl Peer {
         // Handshake
         let handshake = Handshake::new(info_hash, peer_id);
 
-        // let mut data: Vec<u8> = vec![];
-        // data.push(handshake.protocol_string_length);
-        // data.extend_from_slice(handshake.protocol.as_bytes());
-        // data.extend_from_slice(&handshake.reserved[..]);
-        // data.extend_from_slice(handshake.info_hash.as_bytes());
-        // data.extend_from_slice(handshake.peer_id.as_bytes());
-
-        let options = bincode::DefaultOptions::new();
-        // .with_big_endian()
-        // .allow_trailing_bytes()
-        // .with_fixint_encoding();
-
-        let handshake = match options.serialize(&handshake) {
-            Ok(b) => b,
-            Err(err) => return Err(format!("Failed serializing handshake: {}", err)),
-        };
-
-        match stream.write(&handshake) {
+        match stream.write(&handshake.to_bytes()) {
             Ok(size) => println!("Sent {} bytes", size),
             Err(err) => return Err(format!("Failed sending handshake: {}", err)),
         };
@@ -61,33 +40,32 @@ impl Peer {
         // reserved: 8 bytes
         // info_hash: 20 bytes
         // peer_id: 20 bytes
-        // This is not completely reliable as we relying on the fact the protocol is string is exactly
+        // This is not completely reliable as we relying on the fact the protocol string is exactly
         // 19 bytes long, but it could not be. This is good enough for the time being.
-        let mut buf = [0; 300];
+        let mut buf = [0; 68];
 
         match stream.read(&mut buf[..]) {
             Ok(size) => println!("Received {} bytes", size),
             Err(err) => return Err(format!("Failed reading data from peer: {}", err)),
         };
 
-        println!("sent     bytes: {:?}", handshake);
-        println!("received bytes: {:?}", buf);
-
-        let handshake: Handshake = match options.deserialize(&buf) {
+        let handshake: Handshake = match Handshake::from_bytes(&buf) {
             Ok(res) => res,
             Err(err) => return Err(format!("Failed deserializing handshake: {}", err)),
         };
-        if handshake.info_hash != info_hash {
+
+        if &handshake.info_hash != info_hash {
             // This is not the file we want, there's something wrong.
             // Close the connection.
             _ = stream.shutdown(std::net::Shutdown::Both);
             return Err(String::from("Received wrong info hash from peer"));
         }
-        if peer_id.len() > 0 && peer_id != handshake.peer_id {
+
+        if self.id.len() > 0 && self.id.as_bytes() != &handshake.peer_id {
             // This peer is returning a different id than expected.
             // Close the connection.
             _ = stream.shutdown(std::net::Shutdown::Both);
-            return Err(String::from("Received unexpected peer id from peer"));
+            return Err(format!("Received unexpected peer id from peer"));
         }
         Ok(stream)
     }
