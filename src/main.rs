@@ -1,82 +1,22 @@
 use core::panic;
 
+pub mod message;
 pub mod peer_id;
 pub mod torrentfile;
 
+use crate::message::{Handshake, Peer, TrackerResponse};
 use crate::peer_id::generate_peer_id;
 use crate::torrentfile::MetaInfo;
 
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    net::{IpAddr, TcpStream},
+    net::TcpStream,
     path::PathBuf,
 };
 
 use bincode::Options;
 use clap::Parser;
-use serde::{Deserialize, Deserializer};
-use serde_derive::{Deserialize, Serialize};
-
-#[derive(Deserialize, Debug)]
-struct Peer {
-    #[serde(rename = "peer id")]
-    id: String,
-    ip: String,
-    port: String,
-}
-
-impl Peer {
-    fn address(&self) -> String {
-        format!("{}:{}", self.ip, self.port)
-    }
-}
-
-fn deserialize_peers<'de, D>(deserializer: D) -> Result<Vec<Peer>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: serde_bytes::ByteBuf = Deserialize::deserialize(deserializer)?;
-
-    if let Ok(peers) = serde_bencode::from_bytes::<Vec<Peer>>(s.as_slice()) {
-        return Ok(peers);
-    };
-
-    let mut peers: Vec<Peer> = vec![];
-    for chunk in s.chunks(6) {
-        let ip: [u8; 4] = chunk[..4].try_into().unwrap();
-        let port: [u8; 2] = chunk[4..].try_into().unwrap();
-
-        let ip = IpAddr::from(ip).to_string();
-        let port = ((port[0] as u16) << 8 | port[1] as u16).to_string();
-
-        peers.push(Peer {
-            id: String::from(""),
-            ip,
-            port,
-        });
-    }
-    Ok(peers)
-}
-#[derive(Deserialize, Debug)]
-struct TrackerResponse {
-    #[serde(rename = "failure reason")]
-    failure_reason: Option<String>,
-    #[serde(rename = "warning message")]
-    warning_message: Option<String>,
-    #[serde(default)]
-    interval: i32,
-    #[serde(default, rename = "min interval")]
-    min_interval: Option<i32>,
-    #[serde(default, rename = "tracker id")]
-    tracker_id: String,
-    #[serde(default)]
-    complete: i32, // Seeders
-    #[serde(default)]
-    incomplete: i32, // Leechers
-    #[serde(default, deserialize_with = "deserialize_peers")]
-    peers: Vec<Peer>,
-}
 
 fn tracker_get(torrent: &MetaInfo, peer_id: &String) -> Result<TrackerResponse, String> {
     if !torrent.announce.starts_with("http") {
@@ -107,32 +47,6 @@ fn tracker_get(torrent: &MetaInfo, peer_id: &String) -> Result<TrackerResponse, 
     }
 
     Ok(tracker_res)
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Handshake<'a> {
-    #[serde(rename = "pstrlen")]
-    protocol_string_length: u8,
-    #[serde(rename = "pstr")]
-    protocol: &'a str,
-    #[serde(default, with = "serde_bytes")]
-    reserved: [u8; 8],
-    #[serde(default)]
-    info_hash: &'a str,
-    #[serde(default)]
-    peer_id: &'a str,
-}
-
-impl Handshake<'_> {
-    fn new<'a>(info_hash: &'a String, peer_id: &'a String) -> Handshake<'a> {
-        Handshake {
-            protocol_string_length: 19,
-            protocol: "BitTorrent protocol",
-            reserved: [0; 8],
-            info_hash: info_hash.as_str(),
-            peer_id: peer_id.as_str(),
-        }
-    }
 }
 
 fn open_stream(peer: &Peer, info_hash: &String, peer_id: &String) -> Result<TcpStream, String> {
