@@ -88,27 +88,13 @@ fn generate_peer_id() -> String {
     format!("{}{}", peer_id_fixed, random_id_suffix)
 }
 
-fn build_tracker_url(torrent: &MetaInfo, peer_id: &String) -> String {
-    format!(
-        "{}?info_hash={}&peer_id={}&port={}&uploaded={}&downloaded={}&compact={}&left={}",
-        torrent.announce,
-        torrent.info.hash_encoded(),
-        peer_id,
-        "6881",
-        "0",
-        "0",
-        "1",
-        torrent.info.size(),
-    )
-}
-
 fn tracker_get(torrent: &MetaInfo, peer_id: &String) -> Result<TrackerResponse, String> {
     if !torrent.announce.starts_with("http") {
         // TODO: Support UDP trackers
         let protocol = torrent.announce.split(":").collect::<Vec<&str>>()[0];
         panic!("{} trackers not supported", protocol)
     }
-    let url = build_tracker_url(torrent, &peer_id);
+    let url = torrent.build_tracker_url(&peer_id);
     let client = reqwest::blocking::Client::new();
     let res = match client.get(url).send() {
         Ok(res) => res,

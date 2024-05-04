@@ -10,3 +10,19 @@ pub struct MetaInfo {
     /// Torrent metadata
     pub info: Info,
 }
+
+impl MetaInfo {
+    pub fn build_tracker_url(&self, peer_id: &String) -> String {
+        format!(
+            "{}?info_hash={}&peer_id={}&port={}&uploaded={}&downloaded={}&compact={}&left={}",
+            self.announce,
+            self.info.hash_encoded(),
+            peer_id,
+            "6881",
+            "0",
+            "0",
+            "1",
+            self.info.size(),
+        )
+    }
+}
